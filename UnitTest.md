@@ -1,5 +1,3 @@
----
-
 # 🧠 What are Unit Tests?
 **Unit tests** check **individual, isolated pieces of code** — typically a **single function, method, or class** — to ensure they behave **exactly** as expected.
 
