@@ -159,7 +159,3 @@ public void Greet_ValidUser_ReturnsGreeting()
 - **FluentAssertions** – More readable assertions
 - **Coverlet** – Code coverage
 - **Test Explorer** in Visual Studio – Running tests
-
----
-
-Would you like me to show you how to set up a test project and run it using Visual Studio or CLI?
