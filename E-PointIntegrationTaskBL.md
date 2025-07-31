@@ -372,3 +372,142 @@ Console.WriteLine($"Order ID: {orderId}, Status: {status}, Amount: {amount}, Mes
 ---
 
 ---------------------------------------------------------------------------------------------------------------------------
+###  **Page 19-24**
+
+Вот краткое **пошаговое описание бизнес-логики** для **сохранения карты и последующей оплаты сохранённой картой** через **Epoint API**.
+
+---
+
+## ✅ **1. Регистрация карты пользователя (сохранение для будущих платежей)**
+
+### Шаг 1: Сформировать `data` и `signature`
+
+* **URL запроса**: `https://epoint.az/api/1/card-registration`
+* **Метод**: POST
+
+### Формат JSON (`json_string`):
+
+```json
+{
+  "public_key": "i000000001",
+  "language": "ru",
+  "refund": 0,
+  "description": "Сохранение карты",
+  "success_redirect_url": "https://yourapp.com/success",
+  "error_redirect_url": "https://yourapp.com/error"
+}
+```
+
+### Шаг 2: Подпись запроса
+
+```csharp
+string sgnString = privateKey + data + privateKey;
+byte[] hashBytes = SHA1.Create().ComputeHash(Encoding.UTF8.GetBytes(sgnString));
+string signature = Convert.ToBase64String(hashBytes);
+```
+
+### Шаг 3: Отправка запроса и получение ответа
+
+#### Ответ:
+
+```json
+{
+  "status": "success",
+  "redirect_url": "https://secure.epoint.az/form/...",
+  "card_id": "xxxxxxxxxxxx"
+}
+```
+
+➡️ **Перенаправьте пользователя на `redirect_url`**, чтобы он ввёл данные карты и прошёл 3DS или другой способ подтверждения.
+
+---
+
+## ✅ **2. Получение callback от Epoint**
+
+После завершения операции пользователь будет перенаправлен на `success_redirect_url` или `error_redirect_url`. Параллельно ваш сервер получит **POST-запрос на `result_url`** от Epoint с параметрами:
+
+* `data` (base64)
+* `signature`
+
+### Проверьте подпись так же, как в предыдущем примере:
+
+```csharp
+// server-side
+bool isValid = (signature == EpointSignatureHelper.GenerateSignature(privateKey, data));
+```
+
+### Расшифруйте `data` и получите `card_id`:
+
+```json
+{
+  "status": "success",
+  "card_id": "xxxxxxxxxxxx",
+  ...
+}
+```
+
+---
+
+## ✅ **3. Выполнение платежа сохранённой картой**
+
+### Шаг 1: Сформируйте `json_string`
+
+```json
+{
+  "public_key": "i000000001",
+  "language": "ru",
+  "card_id": "xxxxxxxxxxxx",         // из предыдущего шага
+  "order_id": "order-12345",
+  "amount": 100.00,
+  "currency": "AZN",
+  "description": "Оплата товара"
+}
+```
+
+### Шаг 2: Подпись (аналогично):
+
+```csharp
+string data = Convert.ToBase64String(Encoding.UTF8.GetBytes(jsonString));
+string signature = GenerateSignature(privateKey, data);
+```
+
+### Шаг 3: Отправка на:
+
+* `https://epoint.az/api/1/execute-pay`
+* POST `{ data, signature }`
+
+---
+
+## ✅ **4. Получение ответа от Epoint (execute-pay)**
+
+### Пример ответа:
+
+```json
+{
+  "status": "success",
+  "transaction": "tx123456",
+  "bank_transaction": "...",
+  "bank_response": "...",
+  "rrn": "987654321098",
+  "card_name": "Ivan Ivanov",
+  "card_mask": "411111******1111",
+  "amount": 100.00,
+  "message": "Оплата успешна"
+}
+```
+
+---
+
+## ✅ **Итоги (бизнес логика):**
+
+| Шаг | Действие                                | Цель                                       |
+| --- | --------------------------------------- | ------------------------------------------ |
+| 1   | Вызов `/card-registration`              | Получить `card_id`                         |
+| 2   | Перенаправление на `redirect_url`       | Клиент вводит карту                        |
+| 3   | Получение callback (`result_url`)       | Подтвердить результат, сохранить `card_id` |
+| 4   | Вызов `/execute-pay` с `card_id`        | Выполнить платёж без ввода карты           |
+| 5   | Получить результат и отобразить клиенту | Финализировать платёж                      |
+
+---
+
+Если нужно — могу сгенерировать C#-клиент для всех этих шагов.
